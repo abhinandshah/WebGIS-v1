@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - Palika GIS{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <div class="profile-header">
+        <h1>Profile Management</h1>
+        <p>Manage your account settings and preferences</p>
+    </div>
+    
+    <div class="profile-content">
+        <div class="profile-card">
+            <div class="profile-avatar">
+                <svg width="80" height="80" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm0 2c-4.42 0-8 2.69-8 6v1h16v-1c0-3.31-3.58-6-8-6z"/>
+                </svg>
+            </div>
+            
+            <div class="profile-info">
+                <h2>{{ current_user.name }}</h2>
+                <p class="profile-role">Role: <span class="badge">{{ current_user.role|capitalize }}</span></p>
+                <p class="profile-username">Username: {{ current_user.id }}</p>
+            </div>
+        </div>
+        
+        <div class="profile-details">
+            <h3>Account Information</h3>
+            <div class="detail-row">
+                <span class="detail-label">Department:</span>
+                <span class="detail-value">GIS & Planning</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Municipality:</span>
+                <span class="detail-value">Damak Municipality</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Province:</span>
+                <span class="detail-value">Koshi Province</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Last Login:</span>
+                <span class="detail-value">{{ "now"|default("2026-01-15 10:30 AM") }}</span>
+            </div>
+        </div>
+        
+        <div class="profile-actions">
+            <button class="btn-secondary">Edit Profile</button>
+            <button class="btn-secondary">Change Password</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

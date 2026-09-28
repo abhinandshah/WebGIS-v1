@@ -1,0 +1,175 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="900">
+    <title>Nepal - Interactive Weather Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #map { height: 600px; width: 100%; border-radius: 0.75rem; z-index: 1; }
+        .weather-popup b { color: #dc2626; font-size: 1.1rem; }
+        .legend {
+            padding: 10px;
+            font: 12px Arial, sans-serif;
+            background: rgba(255,255,255,0.9);
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            border-radius: 5px;
+            line-height: 20px;
+        }
+        .legend i { width: 14px; height: 14px; float: left; margin-right: 8px; border-radius: 3px; }
+        .temp-label {
+            background: transparent !important; border: none !important; box-shadow: none !important;
+            font-weight: 900; font-size: 12px; color: white !important;
+            text-shadow: 0 0 4px #000; pointer-events: none;
+        }
+        .loading-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.7); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; color: #dc2626; border-radius: 0.75rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 p-4 md:p-6 min-h-screen">
+    <div class="max-w-7xl mx-auto w-full">
+        <header class="mb-6 flex flex-col md:flex-row justify-between items-end gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight">NEPAL <span class="text-red-600">LIVE</span></h1>
+                <p id="full-date" class="text-slate-600 font-medium"></p>
+            </div>
+            
+            <div class="flex flex-col gap-1 items-end">
+                <label for="region-select" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Select Region</label>
+                <select id="region-select" class="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-red-500 block p-2.5 shadow-sm">
+                    <option value="ALL">Whole Country</option>
+                    <option value="CAPITALS">Major Hubs</option>
+                    <optgroup label="Provinces">
+                        <option value="P1">Koshi Province</option>
+                        <option value="P2">Madhesh Province</option>
+                        <option value="P3" selected>Bagmati Province</option>
+                        <option value="P4">Gandaki Province</option>
+                        <option value="P5">Lumbini Province</option>
+                        <option value="P6">Karnali Province</option>
+                        <option value="P7">Sudurpashchim</option>
+                    </optgroup>
+                </select>
+            </div>
+        </header>
+
+        <div class="relative bg-white p-2 rounded-2xl shadow-xl border border-slate-200">
+            <div id="loading" class="loading-overlay">Syncing Satellite Data...</div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script>
+        const DATA_POINTS = {
+            P1: [{name:"Biratnagar",lat:26.45,lon:87.27},{name:"Dharan",lat:26.81,lon:87.27},{name:"Namche",lat:27.80,lon:86.71}],
+            P2: [{name:"Janakpur",lat:26.72,lon:85.92},{name:"Birgunj",lat:27.01,lon:84.87}],
+            P3: [{name:"Kathmandu",lat:27.71,lon:85.32},{name:"Hetauda",lat:27.42,lon:85.03},{name:"Bharatpur",lat:27.68,lon:84.43}],
+            P4: [{name:"Pokhara",lat:28.20,lon:83.98},{name:"Jomsom",lat:28.78,lon:83.73}],
+            P5: [{name:"Butwal",lat:27.70,lon:83.44},{name:"Nepalgunj",lat:28.05,lon:81.61}],
+            P6: [{name:"Birendranagar",lat:28.59,lon:81.63},{name:"Jumla",lat:29.27,lon:82.18}],
+            P7: [{name:"Dhangadhi",lat:28.68,lon:80.60},{name:"Mahendranagar",lat:28.92,lon:80.17}]
+        };
+        DATA_POINTS.ALL = Object.values(DATA_POINTS).flat();
+        DATA_POINTS.CAPITALS = [DATA_POINTS.P3[0], DATA_POINTS.P4[0], DATA_POINTS.P1[0], DATA_POINTS.P5[1], DATA_POINTS.P7[0], DATA_POINTS.P2[0]];
+
+        let map, markersLayer, baseLayers;
+
+        function initMap() {
+            // Define Base Layers
+            const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
+            const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' });
+            const terrain = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { attribution: 'Google' });
+
+            map = L.map('map', {
+                center: [28.39, 84.12],
+                zoom: 7,
+                layers: [street] // Default layer
+            });
+
+            baseLayers = {
+                "Street View": street,
+                "Satellite": satellite,
+                "Terrain": terrain
+            };
+
+            L.control.layers(baseLayers, null, { position: 'topright', collapsed: false }).addTo(map);
+            markersLayer = L.layerGroup().addTo(map);
+
+            // Legend
+            const legend = L.control({position: 'bottomright'});
+            legend.onAdd = () => {
+                const div = L.DomUtil.create('div', 'legend');
+                const grades = [35, 25, 15, 5];
+                const colors = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6"];
+                div.innerHTML = '<b>Temp</b><br>';
+                for(let i=0; i<grades.length; i++) {
+                    div.innerHTML += `<i style="background:${colors[i]}"></i> ${grades[i]}°C+<br>`;
+                }
+                return div;
+            };
+            legend.addTo(map);
+
+            document.getElementById('region-select').addEventListener('change', (e) => updateView(e.target.value));
+            updateView('P3');
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+        }
+
+        async function updateView(regionKey) {
+            const towns = DATA_POINTS[regionKey];
+            document.getElementById('loading').style.display = 'flex';
+            markersLayer.clearLayers();
+
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${towns.map(t=>t.lat).join(',')}&longitude=${towns.map(t=>t.lon).join(',')}&current=temperature_2m,wind_speed_10m,wind_direction_10m&timezone=Asia%2FKathmandu`;
+                const response = await fetch(url);
+                const data = await response.json();
+                const results = Array.isArray(data) ? data : [data];
+                
+                const bounds = L.latLngBounds();
+                results.forEach((res, i) => {
+                    const t = towns[i];
+                    const temp = Math.round(res.current.temperature_2m);
+                    bounds.extend([t.lat, t.lon]);
+
+                    const marker = L.circleMarker([t.lat, t.lon], {
+                        radius: 14, fillColor: temp > 30 ? "#ef4444" : temp > 20 ? "#f59e0b" : "#10b981",
+                        color: "#fff", weight: 2, fillOpacity: 0.9
+                    }).addTo(markersLayer);
+
+                    marker.bindPopup(`<b>${t.name}</b><br>Temp: ${temp}°C<br>Wind: ${res.current.wind_speed_10m}km/h`);
+                    marker.bindTooltip(`${temp}`, { permanent: true, direction: 'center', className: 'temp-label' });
+                });
+                map.flyToBounds(bounds, { padding: [50, 50] });
+                document.getElementById('loading').style.display = 'none';
+            } catch (e) { console.error(e); }
+        }
+
+        function updateDateTime() {
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit',
+                hour12: true,
+                timeZone: 'Asia/Kathmandu'
+            };
+            document.getElementById('full-date').textContent = now.toLocaleString('en-US', options);
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
+
